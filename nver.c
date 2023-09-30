@@ -1,3 +1,34 @@
+/****************************************************************************
+ *
+ *  ver.c -- OS/2 - ECS - ArcaOS version command 
+ *
+ *  ========================================================================
+ *
+ *    Version 1.0       Michael K Greene <mikeos2@mail.com>
+ *                      September 2023
+ *
+ *  ========================================================================
+ *
+ *  Description: Displays and modifies the contents of an executable-file
+ *               header for OS/2 - ArcaOS files.
+ *
+ *  ========================================================================
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program; if not, write to the Free Software
+ *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ ***************************************************************************/
 
 #define INCL_DOSMISC
 
@@ -10,7 +41,6 @@
 #include <sys\stat.h>
 #include <fcntl.h>
 #include <io.h>
-#include <alloca.h>
 
 #define VER_BUFFER_SIZE 20
 
@@ -42,23 +72,24 @@ typedef struct _SYSLEVELHEADER
     unsigned long h_data;
 } SYSLEVELHEADER;
 
-
 void SysECSVer(void);
-void SysArcaVer(void);
+void SysArcaVer(char *syspath);
 void SysOS2Ver(void);
 
 void main(void)
 {
-    // path to OSDIR
-    char *syspath = getenv("OSDIRX");
+    // path to OSDIR - I expect this only on ArcaOS
+    char *syspath = getenv("OSDIR");
 
     // I assume if OSDIR does not exist then we are not running on
     // ArcaOS so I will head to SysECSVer and try there. If that
     // fails then the return will be from SysOS2Ver
     if (syspath == NULL)
+    {
         SysECSVer(); // no OSDIR - try ECS
+    }
     else
-        SysArcaVer(); // must be ArcaOS
+        SysArcaVer(syspath); // must be ArcaOS
 
     return;
 }
@@ -70,8 +101,7 @@ void SysECSVer(void)
     unsigned long BootDrive[1];
     unsigned long Versions[2];
 
-    char lvlpath[_MAX_PATH] = {0};
-    char *buffer = NULL;
+    char lvlpath[CCHMAXPATH] = {0};
 
     SYSLEVELHEADER *lvlheader = NULL;
     SYSLEVELDATA *lvldata = NULL;
@@ -82,50 +112,51 @@ void SysECSVer(void)
 
     // if cannot find SYSLEVEL.ECS fall through to SysOS2Ver
     if (access(lvlpath, F_OK) == -1)
-        SysOS2Ver( );
+        SysOS2Ver();
+    else
+    {
 
-    buffer = alloca(filelength(handle));
+        char *buffer = calloc(filelength(handle), sizeof(char));
 
-    handle = open(lvlpath, O_RDONLY | O_BINARY);
-    read(handle, buffer, filelength(handle));
-    close(handle);
+        handle = open(lvlpath, O_RDONLY | O_BINARY);
+        read(handle, buffer, filelength(handle));
+        close(handle);
 
-    lvlheader = (SYSLEVELHEADER *)buffer;
-    lvldata = (SYSLEVELDATA *)&(buffer[lvlheader->h_data]);
+        lvlheader = (SYSLEVELHEADER *)buffer;
+        lvldata = (SYSLEVELDATA *)&(buffer[lvlheader->h_data]);
 
-    Versions[0] = lvldata->d_version[0] >> 4;
-    Versions[1] = lvldata->d_version[0] & 15;
+        Versions[0] = lvldata->d_version[0] >> 4;
+        Versions[1] = lvldata->d_version[0] & 15;
 
-    printf("eCS %lu.%02lu\n", Versions[0], Versions[1]);
+        printf("eCS %lu.%02lu\n", Versions[0], Versions[1]);
+
+        free(buffer);
+    }
 }
 
-void SysArcaVer(void)
+void SysArcaVer(char *syspath)
 {
-    char arcafile[_MAX_PATH] = {0};
+    char arcafile[CCHMAXPATH] = {0};
     char buffer[VER_BUFFER_SIZE];
     char *arcaflg = "\\install\\install.flg";
-
-    // path to OSDIR and setup path to install.flg
-    char *syspath = getenv("OSDIR");
-
-    // if cannot find OSDIR fall through to SysOS2Ver
-    if (syspath == NULL)
-        SysOS2Ver();
 
     strncpy(arcafile, syspath, strlen(syspath));
     strncat(arcafile, arcaflg, strlen(arcaflg));
 
+    // if cannot find install.flg fall through to SysOS2Ver
     if (access(arcafile, F_OK) == 0)
     {
         // found install file
         FILE *fp = fopen(arcafile, "r");
         fgets(buffer, VER_BUFFER_SIZE, fp);
         fclose(fp);
+
+        buffer[strcspn(buffer, "\n")] = 0;
+
+        printf("%s", buffer);
     }
-
-    buffer[strcspn(buffer, "\n")] = 0;
-
-    printf("%s", buffer);
+    else
+        SysOS2Ver();
 }
 
 void SysOS2Ver(void)
@@ -135,5 +166,5 @@ void SysOS2Ver(void)
     DosQuerySysInfo(QSV_VERSION_MAJOR, QSV_VERSION_MINOR,
                     Versions, sizeof(Versions));
 
-    printf("OS/2 %lu.%02lu", Versions[0] / 10, Versions[1]);
+    printf("OS/2 %lu.%02lu", (Versions[0] / 10), Versions[1]);
 }
