@@ -9,8 +9,7 @@
  *
  *  ========================================================================
  *
- *  Description: Displays and modifies the contents of an executable-file
- *               header for OS/2 - ArcaOS files.
+ *  Description: Simple version command for OS/2 - ArcaOS
  *
  *  ========================================================================
  *
